@@ -31,7 +31,7 @@ run:database
 	if [ ! -f '.env' ]; then \
 		cp .env.example .env; \
 	fi
-	go run ./cmd/api/api.go 
+	go run ./cmd/...
 
 database:
 	docker-compose up -d

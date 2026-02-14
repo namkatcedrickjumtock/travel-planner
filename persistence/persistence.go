@@ -1,24 +1,36 @@
 package persistence
 
-import "gorm.io/gorm"
+import (
+	"fmt"
 
- 
-// Repository persistence methods.
+	"gorm.io/gorm"
+)
 
+// Repository defines all database operations for the travel planner.
+// Each domain area (trips, hotels, flights, activities, bookings) is
+// implemented in its own file but satisfies this single interface,
+// making it straightforward to swap in a mock for unit tests.
 type Repository interface {
+	TripRepository
+	HotelRepository
+	FlightRepository
+	BookingRepository
 }
 
-// RepositoryPg is a PostgreSQL implementation of Repository.
+// RepositoryPg is the PostgreSQL implementation of Repository.
+// It embeds a *gorm.DB connection that is shared across all sub-repositories.
 type RepositoryPg struct {
 	gormDB *gorm.DB
 }
 
-// Ensure RepositoryPg implements the Repository interface.
+// Ensure RepositoryPg fully implements Repository at compile time.
 var _ Repository = (*RepositoryPg)(nil)
 
-// NewRepository creates a new RepositoryPg instance with a GORM DB connection.
+// NewRepository creates a RepositoryPg and verifies the DB connection is alive.
 func NewRepository(db *gorm.DB) (*RepositoryPg, error) {
-	return &RepositoryPg{
-		gormDB: db,
-	}, nil
+	if db == nil {
+		return nil, fmt.Errorf("persistence: gorm DB instance must not be nil")
+	}
+
+	return &RepositoryPg{gormDB: db}, nil
 }

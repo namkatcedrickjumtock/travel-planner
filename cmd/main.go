@@ -18,7 +18,8 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Println("error starting the application: %w", err)
+		// Use fmt.Fprintf so the formatted message is printed correctly.
+		fmt.Fprintf(os.Stderr, "error starting the application: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -34,17 +35,16 @@ func run() error {
 			Host           string `conf:"env:DB_HOST,required"`
 			Port           int    `conf:"env:DB_PORT,required"`
 			Name           string `conf:"env:DB_NAME,required"`
-			DisableTLS     bool   `conf:"env:DB_DISABLE_TLS,default:false"`
 			AllowedOrigins string `conf:"env:ALLOWED_ORIGINS,required"`
 			MigrationsPath string `conf:"env:DB_MIGRATIONS_PATH,required"`
 		}
 	}
 
-	// loadDevEnv loads .env file if present
+	// Load .env file when present (development convenience).
+	// In production the variables should be injected directly into the environment.
 	if _, err := os.Stat(".env"); err == nil {
-		err := godotenv.Load()
-		if err != nil {
-			log.Fatal("Error loading .env file")
+		if err := godotenv.Load(); err != nil {
+			log.Fatal("error loading .env file")
 		}
 	}
 
@@ -52,55 +52,60 @@ func run() error {
 	if err != nil {
 		if errors.Is(err, conf.ErrHelpWanted) {
 			fmt.Printf("%v\n", help)
-
 			return nil
 		}
 
 		return fmt.Errorf("parsing config: %w", err)
 	}
 
-	tslConfig := ""
-	if cfg.DB.DisableTLS {
-		tslConfig = "sslmode=disable"
-	}
+	// Build the PostgreSQL DSN from config values.
+	sslMode := "sslmode=disable"
 
-	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s %s",
-		cfg.DB.Host, cfg.DB.Port, cfg.DB.User, cfg.DB.Password, cfg.DB.Name, tslConfig)
+	dsn := fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=%s %s",
+		cfg.DB.Host, cfg.DB.Port, cfg.DB.User, cfg.DB.Password, cfg.DB.Name, sslMode,
+	)
 
-	sqlDBInstance, err := sql.Open("postgres", psqlInfo)
+	// Open the standard library DB first so we can pass it to the migrator.
+	sqlDB, err := sql.Open("postgres", dsn)
 	if err != nil {
-		return err
+		return fmt.Errorf("opening sql connection: %w", err)
 	}
+	defer sqlDB.Close()
 
+	// Wrap the same connection in GORM for the ORM layer.
 	gormDB, err := gorm.Open(postgres.New(postgres.Config{
-		Conn: sqlDBInstance,
-	}), &gorm.Config{TranslateError: true})
+		Conn: sqlDB,
+	}), &gorm.Config{
+		TranslateError: true,
+	})
 	if err != nil {
-		return err
+		return fmt.Errorf("opening gorm connection: %w", err)
 	}
 
-	defer sqlDBInstance.Close()
-
-	// ctx := context.Background()
-
-	if err := persistence.Migrate(sqlDBInstance, cfg.DB.MigrationsPath, cfg.DB.Name); err != nil {
-		return err
+	// Run any pending SQL migrations before accepting traffic.
+	if err := persistence.Migrate(sqlDB, cfg.DB.MigrationsPath, cfg.DB.Name); err != nil {
+		return fmt.Errorf("running migrations: %w", err)
 	}
 
+	// Wire up the dependency chain: persistence → service → api.
 	repo, err := persistence.NewRepository(gormDB)
 	if err != nil {
-		return err
+		return fmt.Errorf("creating repository: %w", err)
 	}
-	
-	// travel planner interface
-	service, err:= services.NewTravelPlannerService(repo)
 
-	listener, err := api.NewAPIListener(service)
+	svc, err := services.NewTravelPlannerService(repo)
 	if err != nil {
-		return err
+		return fmt.Errorf("creating service: %w", err)
+	}
+
+	listener, err := api.NewAPIListener(svc)
+	if err != nil {
+		return fmt.Errorf("creating api listener: %w", err)
 	}
 
 	listenAddress := fmt.Sprintf("0.0.0.0:%s", cfg.API.ListenPort)
+	log.Printf("server listening on %s", listenAddress)
 
 	return listener.Run(listenAddress)
 }
