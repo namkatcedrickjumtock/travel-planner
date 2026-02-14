@@ -8,17 +8,17 @@ import "gorm.io/gorm"
 type Repository interface {
 }
 
-// RepositoryPg is a postgres implementation of Repository.
+// RepositoryPg is a PostgreSQL implementation of Repository.
 type RepositoryPg struct {
 	gormDB *gorm.DB
 }
 
-// This line ensures that the RepositoryPg struct implements the Repository interface.
-var _ Repository = &RepositoryPg{}
+// Ensure RepositoryPg implements the Repository interface.
+var _ Repository = (*RepositoryPg)(nil)
 
+// NewRepository creates a new RepositoryPg instance with a GORM DB connection.
 func NewRepository(db *gorm.DB) (*RepositoryPg, error) {
 	return &RepositoryPg{
-		 
 		gormDB: db,
 	}, nil
 }

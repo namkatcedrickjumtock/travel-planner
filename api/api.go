@@ -3,10 +3,11 @@ package api
 import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/namkatcedrickjumtock/travel-planner/internal/services"
 )
  
 
-func NewAPIListener(services any) (*gin.Engine, error) {
+func NewAPIListener(services services.Planner) (*gin.Engine, error) {
 	route := gin.Default()
 	route.Use(cors.Default())
  

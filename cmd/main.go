@@ -10,6 +10,7 @@ import (
 	"github.com/ardanlabs/conf/v3"
 	"github.com/joho/godotenv"
 	"github.com/namkatcedrickjumtock/travel-planner/api"
+	"github.com/namkatcedrickjumtock/travel-planner/internal/services"
 	"github.com/namkatcedrickjumtock/travel-planner/persistence"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -17,7 +18,7 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Println("Failed:", err)
+		fmt.Println("error starting the application: %w", err)
 		os.Exit(1)
 	}
 }
@@ -82,16 +83,19 @@ func run() error {
 
 	// ctx := context.Background()
 
-	// if err := persistence.Migrate(sqlDBInstance, cfg.DB.MigrationsPath, cfg.DB.Name); err != nil {
-	// 	return err
-	// }
+	if err := persistence.Migrate(sqlDBInstance, cfg.DB.MigrationsPath, cfg.DB.Name); err != nil {
+		return err
+	}
 
 	repo, err := persistence.NewRepository(gormDB)
 	if err != nil {
 		return err
 	}
+	
+	// travel planner interface
+	service, err:= services.NewTravelPlannerService(repo)
 
-	listener, err := api.NewAPIListener(repo)
+	listener, err := api.NewAPIListener(service)
 	if err != nil {
 		return err
 	}
