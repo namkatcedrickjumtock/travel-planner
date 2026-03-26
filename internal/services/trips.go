@@ -30,19 +30,18 @@ type TripService interface {
 
 // CreateTrip validates the input then delegates to the repository.
 func (s *TravelPlannerServiceImpl) CreateTrip(req models.CreateTripRequest) (*models.Trip, error) {
-	// Business rule: end date must be after start date.
 	if !req.EndDate.After(req.StartDate) {
-		return nil, fmt.Errorf("services: end_date must be after start_date")
+		return nil, fmt.Errorf("end_date must be after start_date")
 	}
 
 	// Business rule: trips cannot be created in the past.
 	if req.StartDate.Before(time.Now().UTC().Truncate(24 * time.Hour)) {
-		return nil, fmt.Errorf("services: start_date cannot be in the past")
+		return nil, fmt.Errorf("start_date cannot be in the past")
 	}
 
 	trip := models.Trip{
 		UserID:      req.UserID,
-		Title:       req.Title,
+		Title:       req.Title,  
 		Destination: req.Destination,
 		StartDate:   req.StartDate,
 		EndDate:     req.EndDate,
@@ -51,7 +50,7 @@ func (s *TravelPlannerServiceImpl) CreateTrip(req models.CreateTripRequest) (*mo
 
 	created, err := s.repo.CreateTrip(trip)
 	if err != nil {
-		return nil, fmt.Errorf("services: create trip failed: %w", err)
+		return nil, err
 	}
 
 	return created, nil
